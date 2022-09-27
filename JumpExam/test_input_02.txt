@@ -1,0 +1,7 @@
+  root r-x delete-this.xls
+  root r-- bug-report.pdf
+  root r-- doc.xls
+  root r-- podcast.flac
+ alice r-- system.xls
+  root --x invoices.pdf
+ admin rwx SETUP.PY

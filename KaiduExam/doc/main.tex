@@ -1,0 +1,246 @@
+
+% -------------------- Environment Setup -------------------- 
+\documentclass[titlepage=false]{ctexart}
+\CTEXsetup[format={\Large\bfseries}]{section}
+\bibliographystyle{plain}
+\usepackage[left=2.00cm, right=2.00cm, top=2.00cm, bottom=2.00cm]{geometry}
+\usepackage{amsmath,amsfonts,amssymb,amsbsy} % math equations, symbols
+\usepackage{fancyhdr}   % 设置页眉、页脚
+\usepackage{hyperref}
+\usepackage{color}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\renewcommand{\algorithmicrequire}{ \textbf{Input:}}     % use Input in the format of Algorithm  
+\renewcommand{\algorithmicensure}{ \textbf{Initialize:}} % use Initialize in the format of Algorithm  
+\renewcommand{\algorithmicreturn}{ \textbf{Output:}}     % use Output in the format of Algorithm  
+
+\usepackage{inconsolata}
+\fontspec{inconsolata}
+\setmonofont[StylisticSet=1]{inconsolata}
+
+\usepackage{xcolor}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily,
+showstringspaces=false,
+commentstyle=\color{red},
+keywordstyle=\color{blue}
+}
+
+% -------------------- Title -------------------- 
+\title{\textbf{凯读笔试题目程序文档}}
+\author{李想}
+\date{\today}
+
+% -------------------- Document -------------------- 
+\pagestyle{fancy}
+\begin{document}
+\maketitle
+
+% Contents
+\section{程序运行} 
+
+核心类 \texttt{MovingAverage} 位于脚本 \texttt{kdma.py} 中。 
+
+脚本 \texttt{test.py} 中构造了一系列间隔不固定的时间戳和价格序列，用于测试该类。
+
+请直接运行 
+\begin{lstlisting}[language=bash]
+  $ python test.py
+\end{lstlisting}
+测试代码。
+
+
+\section{Notation} 
+
+$t_i$：第$i$个数据点的时间戳
+
+$p_i$：第$i$个数据点的价格
+
+$\tau_i$：第$i$个数据点与上个数据点的时间间隔
+
+$W$：窗口长度
+
+$w_{i|t=t_N}$：计算时间戳为$t_N$的数据点到达后的平均价格时，第$i$个数据点的权重
+
+
+$\bar{p}_i$：第$i$个数据点到达后的平均价格
+
+
+% 平均价格算法
+\section{平均价格} 
+
+\subsection{数学表达} 
+为使平均价格应能较好反映股票价格在窗口时间内的“平均水平”，程序中使用每个价格对应时间戳距离最新时间戳的距离为权重，计算平均价格。
+
+记某个时刻共到达$N$条数据，时间戳与价格的数据对为 $\{(t_i,p_i)\}, i=1,2,\cdots,N$，
+则最新到达的数据时间戳为 $t_N$。窗口时间长度为 $W$，最新窗口期$[t_N-W,W]$内共有 $K(K\ge 1)$ 条数据，
+数据对为$\{(t_i,p_i)\}, i=N-K+1,\dots,N$。
+
+在计算平均价格时，时刻$t_i$的权重 
+\begin{equation}\label{eq:wt}
+    w_{i|t=t_N}=W-(t_N-t_i)=W+t_i-t_N,\quad i=N-K+1,\dots,N
+\end{equation}
+
+时刻$t_N$的平均价格则可以表示为
+\begin{equation}\label{eq:avg_price}
+    \bar{p}_N = \frac{\sum_{i=N-K+1}^N{p_iw_{i|t=t_N}}}{\sum_{i=N-K+1}^N{w_{i|t=t_N}}}
+\end{equation}
+
+\subsection{权重更新}\label{ssec:wt_udpate_without_limit}
+类\texttt{MovingAverage}中对权重是这样处理的：在暂时不考虑内存限制的情况（考虑内存限制下的权重更新方法参见\ref{ssec:wt_udpate_with_limit}）下，在$t_N$时刻，第$i$条数据的权重
+\begin{equation}\label{eq:wt_update_N}
+    w_{i|t=t_N} = W+t_i-t_N
+\end{equation}
+
+当$t_{N+1}$时刻的数据到达时，该权重应被更新为
+\begin{align}\label{eq:wt_update_N+1}
+    w_{i|t=t_{N+1}} &= W+t_i-t_{N+1} = W+t_i-t_N-(t_{N+1}-t_N)\\
+                    &=w_{i|t=t_N} - \tau_{N+1}
+\end{align}
+其中 $\tau_{N+1}=t_{N+1}-t_N$ 为两个时刻的时间间隔。
+
+
+
+\subsection{鲁棒性} 
+
+由于相邻数据点之间的间隔不固定，所以在窗口期$[t_N-W,W]$内，可能存在多个数据点，也可能只有一个数据点（即最新的数据$\{(t_N,p_N)\}$）。
+式\eqref{eq:avg_price}对上述两种情况无差别对待，均可计算出合理的平均价格。
+
+
+
+% 不考虑内存
+\section{不考虑内存限制的算法}
+
+当内存没有任何限制时，我们可以将窗口期内任意多的数据点都记录下来，可以精确地计算式\eqref{eq:avg_price}所表达的平均价格。
+具体算法见算法\ref{algo:nomemlimit}：
+
+
+\begin{algorithm}
+	\caption{不考虑内存限制的算法}
+	\label{algo:nomemlimit}
+	\begin{algorithmic}[1]
+        \REQUIRE ~\\
+            时间戳与价格的数据对时间序列$\{(t_i,p_i)\},i=1,2,\dots,N$.\\  % this command shows "Input"
+            窗口期长度 $W$
+		\ENSURE ~\\           % this command shows "Initialized"
+            最新数据的时间戳 $t=0$\\
+            窗口期内数据点的个数 $n=0$\\
+            窗口期内数据点的时间戳列表 ${\rm L}_t=[\,]$\\
+            窗口期内数据点的时间间隔列表 ${\rm L}_{\tau}=[\,]$\\
+            窗口期内数据点的时间间隔之和 $S_{\tau}=0$\\
+            窗口期内数据点的价格列表 ${\rm L}_p=[\,]$\\
+            窗口期内数据点的权重列表 ${\rm L}_w=[\,]$\\
+        \FOR{$i$ in $\{1,2,\dots,N\}$}
+        \STATE $\tau=t-t_i,\;t=t_i$
+        \WHILE { $n>0$ and $S_{\tau}+\tau>W$}
+            \STATE 按先进先出法弹出${\rm L}_{t},{\rm L}_{\tau},{\rm L}_{p},{\rm L}_{w}$各列表中的第一个元素，记为$t_0,\tau_0,p_0,w_0$
+            \STATE $S_{\tau} = S_{\tau}-\tau_0$
+            \STATE $n = n-1$
+		\ENDWHILE
+        \STATE 将 ${\rm L}_{w}$ 中各元素分别减去 $\tau$
+        \STATE 将 $t_i,\tau,p_i,W$ 分别存入${\rm L}_{t},{\rm L}_{\tau},{\rm L}_{p},{\rm L}_{w}$各列表尾部
+        \STATE $S_{\tau} = S_{\tau}+\tau$
+        \STATE $n = n+1$
+        \STATE $\bar{p}_i={{\rm sum}({\rm L}_{p}\cdot{\rm L}_{w})}/{{\rm sum}({\rm L}_{w})}$
+        \ENDFOR
+        \RETURN 平均价格序列$\{\bar{p}_i\},i=1,2,\dots,N$
+	\end{algorithmic}
+\end{algorithm}
+
+
+\section{考虑内存限制的算法}
+
+当内存存在限制时，可能会出现无法将窗口期内所有数据点都记录下来的情况，这时式\eqref{eq:avg_price}将无法直接适用。
+
+解决方案是：\textbf{当最新数据到达时，在计算最新平均价格之前，若最新窗口期内的数据点数量已经达到内存上限时，找出上一个窗口期内所有数据点中时间间隔最小的两个数据点，将二者的信息“合并”存储，再将最新数据存入，计算最新平均价格}。
+
+\subsection{“合并”存储}
+
+对于任意两个相邻的数据点$(t_{i-1},\tau_{i-1},p_{i-1},w_{i-1}),(t_{i},\tau_{i},p_{i},w_{i})$，合并后的权重为二者权重之和，价格为二者价格的加权平均，且合并后沿用后一时刻的时间数据（可以理解为把“合并”后的数据存储在后一时刻）
+\begin{align}\label{eq:merge}
+    t_i' &= t_i\\
+    \tau_i' &= \tau_{i-1} + \tau_{i}\\
+    w_i' &= w_{i-1} + w_i\\
+    p_i' &= \frac{p_{i-1}w_{i-1} + p_iw_i}{w_i'}
+\end{align}
+
+为什么选择把“合并”后的数据点存储在后一时刻而非前一时刻或中间某时刻，是考虑到若不存储在后一时刻，那么当窗口向后滚动时，很有可能会将这个“合并”的数据点直接排除在新窗口之外，丢失信息导致计算偏差变大。
+
+
+
+如此，如果这两个数据点的时间间隔足够小，则可以将“合并”后的数据点视为一个正常数据点，用于计算平均价格。
+
+同理，还可以会出现需要“合并”已被“合并”数据点的情况，但只要是两个数据点间隔足够小，近似程度仍会比较高。
+
+
+
+\subsection{内存限制时权重的更新}\label{ssec:wt_udpate_with_limit}
+
+\ref{ssec:wt_udpate_without_limit}部分介绍了在没有内存限制时如何在新数据到达时对权重进行更新。
+当存在内存限制时，因为要“合并”数据，所以对已经被“合并”的数据，式\eqref{eq:wt_update_N+1}不再适用。
+但此式仍可以给我们一些启发：如果某个数据点中的信息只有一个原始数据点，那么更新权重时要减去一个$\tau$。
+如果某个“合并”数据点中存有$k$个原始数据点的信息，那么更新权重时只要减去$k$个$\tau$就可以了。
+
+按上述思路，在循环计算平均价格过程中还需要记录“合并”次数这一信息。
+
+\subsection{算法}
+
+考虑有内存限制时的算法见算法\ref{algo:memlimit}：
+
+\begin{algorithm}
+	\caption{考虑内存限制的算法}
+	\label{algo:memlimit}
+	\begin{algorithmic}[1]
+        \REQUIRE ~\\
+            时间戳与价格的数据对时间序列$\{(t_i,p_i)\},i=1,2,\dots,N$.\\  % this command shows "Input"
+            窗口期长度 $W$\\
+            内存上限 $n_B$
+		\ENSURE ~\\           % this command shows "Initialized"
+            最新数据的时间戳 $t=0$\\
+            窗口期内数据点的个数 $n=0$\\
+            窗口期内数据点的时间戳列表 ${\rm L}_t=[\,]$\\
+            窗口期内数据点的时间间隔列表 ${\rm L}_{\tau}=[\,]$\\
+            窗口期内数据点的时间间隔之和 $S_{\tau}=0$\\
+            窗口期内数据点的价格列表 ${\rm L}_p=[\,]$\\
+            窗口期内数据点的权重列表 ${\rm L}_w=[\,]$\\
+            窗口期内数据点的“合并”次数列表 ${\rm L}_c=[\,]$\\
+        \FOR{$i$ in $\{1,2,\dots,N\}$}
+        \STATE $\tau=t-t_i,\;t=t_i$
+        \WHILE { $n>0$ and $S_{\tau}+\tau>W$}
+            \STATE 按先进先出法弹出${\rm L}_{t},{\rm L}_{\tau},{\rm L}_{p},{\rm L}_{w},{\rm L}_{c}$各列表中的第一个元素，记为$t_0,\tau_0,p_0,w_0,c_0$
+            \STATE $S_{\tau} = S_{\tau}-\tau_0$
+            \STATE $n = n-1$
+		\ENDWHILE
+        \IF {$n=n_B$}
+            \STATE $j = ({\rm argmin}\; {\rm L}_{\tau})+1$
+            \STATE 弹出${\rm L}_{t},{\rm L}_{\tau},{\rm L}_{p},{\rm L}_{w},{\rm L}_{c}$各列表中的第$j$个元素，记为$t_j,\tau_j,p_j,w_j,c_j$
+            \STATE $n=n-1$
+            \STATE ${\rm L}_{t}[j-1] = t_j$
+            \STATE ${\rm L}_{\tau}[j-1] = {\rm L}_{\tau}[j-1]+\tau_j$
+            \STATE $w' = {\rm L}_{w}[j-1]+w_j$
+            \STATE $p' = \frac{ {\rm L}_{p}[j-1]{\rm L}_{w}[j-1]+ p_jw_j}{w'}$
+            \STATE ${\rm L}_{w}[j-1] = w'$
+            \STATE ${\rm L}_{p}[j-1] = p'$
+            \STATE ${\rm L}_{c}[j-1] = {\rm L}_{c}[j-1]+c_j$
+        \ENDIF
+        \STATE ${\rm L}_{w}[k] = {\rm L}_{w}[k]-\tau{\rm L}_{c}[k],k=1,2,\dots,i$
+        \STATE 将 $t_i,\tau,p_i,W,1$ 分别存入${\rm L}_{t},{\rm L}_{\tau},{\rm L}_{p},{\rm L}_{w},{\rm L}_{c}$各列表尾部
+        \STATE $S_{\tau} = S_{\tau}+\tau$
+        \STATE $n = n+1$
+        \STATE $\bar{p}_i={{\rm sum}({\rm L}_{p}\cdot{\rm L}_{w})}/{{\rm sum}({\rm L}_{w})}$
+        \ENDFOR
+        \RETURN 平均价格序列$\{\bar{p}_i\},i=1,2,\dots,N$
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
